@@ -1,28 +1,50 @@
 #!/usr/bin/env bash
-# Bash script that sets up your web servers for the deployment of web_static
+# Sets up your web servers for the deployment of web_static
 
-sudo apt-get -y update > /dev/null
-sudo apt-get install -y nginx > /dev/null
-
-# Create all necessary directories and file
-mkdir -p /data/web_static/releases/test/
-mkdir -p /data/web_static/shared/
-touch /data/web_static/releases/test/index.html
-echo "Hello World again!" > /data/web_static/releases/test/index.html
-
-# Check if directory current exist
-if [ -d "/data/web_static/current" ]
-then
-        sudo rm -rf /data/web_static/current
+if ! ( nginx -v &>/dev/null); then
+    sudo apt update -y -qq && \
+        sudo apt install -y nginx -qq
 fi
-# Create a symbolic link to test
-ln -sf /data/web_static/releases/test/ /data/web_static/current
 
-# Change ownership to user ubuntu
-chown -hR ubuntu:ubuntu /data
+sudo mkdir -p /data/web_static/releases/test
+sudo mkdir -p /data/web_static/shared
 
-# Configure nginx to serve content pointed to by symbolic link to hbnb_static
-sed -i '38i\\tlocation /hbnb_static/ {\n\t\talias /data/web_static/current/;\n\t}\n' /etc/nginx/sites-available/default
+html="<html>
+  <head>
+  </head>
+  <body>
+    ALX School
+  </body>
+</html>"
 
-# Restart server
-service nginx restart
+sudo echo "$html" | tee /data/web_static/releases/test/index.html
+
+if [ -h /data/web_static/current ]; then
+    sudo rm -f /data/web_static/current
+fi
+
+SUDO ln -s /data/web_static/releases/test/ /data/web_static/current
+
+sudo chown -R ubuntu:ubuntu /data/
+
+config="server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+        root /data/web_static/releases/test/index.html;
+        index index.html;
+        server_name _;
+        location /hbnb_static/ {
+			# try_files \$uri \$uri/ =404;
+			alias /data/web_static/current/;
+			autoindex off;
+        }
+}
+"
+
+sudo echo "$config" | tee /etc/nginx/sites-available/default
+
+if [ "$(pgrep nginx | wc -l)" -le 0 ];then
+    service nginx start
+else
+    service nginx restart
+fi;
